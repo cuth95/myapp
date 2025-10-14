@@ -1,0 +1,9 @@
+
+reflex==0.8.14
+PyPDF2
+elevenlabs
+google-cloud-texttospeech
+PyMuPDF
+google-generativeai
+google-cloud-aiplatform
+httpx
