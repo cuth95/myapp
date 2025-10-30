@@ -64,13 +64,13 @@ def player_bar() -> rx.Component:
             class_name="flex items-center",
         ),
         rx.el.audio(
-            src=rx.get_upload_url(State.audio_url),
+            src=rx.cond(State.audio_url, rx.get_upload_url(State.audio_url), ""),
             id="audio-player",
             key=State.audio_url,
             custom_attrs={
-                "ontimeupdate": State.on_time_update,
-                "onloadedmetadata": State.on_duration_change,
-                "onended": State.on_ended,
+                "onTimeUpdate": State.on_time_update,
+                "onLoadedMetadata": State.on_duration_change,
+                "onEnded": State.on_ended,
             },
         ),
         class_name="fixed bottom-0 left-80 right-0 h-16 bg-white border-t border-gray-200 flex items-center px-6 z-10",

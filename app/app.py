@@ -32,6 +32,7 @@ def index() -> rx.Component:
         chat_modal(),
         rx.el.audio(id="preview-player", class_name="hidden"),
         class_name="font-['Inter'] bg-white",
+        suppress_hydration_warning=True,
     )
 
 
