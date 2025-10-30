@@ -66,6 +66,7 @@ def player_bar() -> rx.Component:
         rx.el.audio(
             src=rx.get_upload_url(State.audio_url),
             id="audio-player",
+            key=State.audio_url,
             custom_attrs={
                 "ontimeupdate": State.on_time_update,
                 "onloadedmetadata": State.on_duration_change,

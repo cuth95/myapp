@@ -27,22 +27,23 @@ def reader_view() -> rx.Component:
                         + "#zoom="
                         + State.zoom_level.to_string(),
                         class_name="w-full h-full border-none",
+                        key=State.uploaded_file,
                     ),
-                    class_name="h-1/2 border-b border-gray-200",
+                    class_name="w-1/2 h-full",
                 ),
                 rx.el.div(
                     rx.scroll_area(
                         rx.el.p(
                             rx.foreach(State.sentences, sentence_component),
-                            class_name="text-lg leading-relaxed p-6",
+                            class_name="text-lg leading-relaxed p-8",
                         ),
+                        class_name="h-full",
                         type="always",
                         scrollbars="vertical",
-                        class_name="h-full",
                     ),
-                    class_name="h-1/2",
+                    class_name="w-1/2 h-full bg-gray-50 border-l",
                 ),
-                class_name="w-full h-full flex flex-col",
+                class_name="flex w-full h-full",
             ),
             rx.el.div(
                 rx.icon("file-search", class_name="h-16 w-16 text-gray-300"),
