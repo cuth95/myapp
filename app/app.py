@@ -44,6 +44,12 @@ app = rx.App(
             href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap",
             rel="stylesheet",
         ),
+        rx.el.script(
+            src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"
+        ),
+        rx.el.script("""
+            pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+            """),
     ],
 )
 app.add_page(index)

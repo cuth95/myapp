@@ -58,18 +58,30 @@ class AIState(rx.State):
     def _safe_json_parse(self, json_string: str, default: T) -> T:
         """Safely parses a JSON string, extracting it from markdown code blocks if necessary."""
         try:
-            match = re.search(
-                "(json)?\\s*([\\s\\S]*?)\\s*|([\\[{].*[\\]}])", json_string, re.DOTALL
-            )
+            match = re.search("(?:json)?\\s*([\\s\\S]*?)", json_string, re.DOTALL)
             if match:
-                json_content = (
-                    match.group(2) if match.group(2) is not None else match.group(3)
+                json_content = match.group(1).strip()
+                return json.loads(json_content)
+            start_brace = json_string.find("{")
+            start_bracket = json_string.find("[")
+            if start_brace == -1 and start_bracket == -1:
+                raise json.JSONDecodeError(
+                    "No JSON object or array found", json_string, 0
                 )
-                if json_content:
-                    return json.loads(json_content.strip())
-            return json.loads(json_string)
+            if start_bracket != -1 and (
+                start_bracket < start_brace or start_brace == -1
+            ):
+                start = start_bracket
+                end = json_string.rfind("]") + 1
+            else:
+                start = start_brace
+                end = json_string.rfind("}") + 1
+            if end == 0:
+                raise json.JSONDecodeError("Mismatched brackets/braces", json_string, 0)
+            json_content = json_string[start:end]
+            return json.loads(json_content)
         except (json.JSONDecodeError, TypeError) as e:
-            logging.exception(f"Failed to parse JSON. String was: {json_string}")
+            logging.exception(f"Failed to parse JSON. String was: {json_string[:200]}")
             return default
 
     @rx.event(background=True)

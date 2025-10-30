@@ -20,6 +20,8 @@ class State(rx.State):
     uploading: bool = False
     upload_progress: int = 0
     document_text: str = ""
+    is_processing_pdf: bool = False
+    pdf_page_count: int = 0
     active_tab: str = "reader"
     voices: list[dict] = [
         {"name": "Charon (Male)", "id": "en-US-Chirp3-HD-Charon"},
@@ -40,6 +42,7 @@ class State(rx.State):
     duration_str: str = "00:00"
     zoom_level: int = 100
     sentences: list[tuple[str, int]] = []
+    sentence_to_page: dict[int, int] = {}
     timepoints: list[dict[str, str | float]] = []
     current_sentence_index: int = -1
     original_filename: str = ""
@@ -52,10 +55,12 @@ class State(rx.State):
     @rx.event
     def zoom_in(self):
         self.zoom_level += 10
+        yield self._render_pdf_script()
 
     @rx.event
     def zoom_out(self):
         self.zoom_level = max(50, self.zoom_level - 10)
+        yield self._render_pdf_script()
 
     def _reset_audio_state(self):
         self.audio_url = None
@@ -67,6 +72,13 @@ class State(rx.State):
         self.timepoints = []
         self.current_sentence_index = -1
 
+    def _reset_pdf_state(self):
+        self.document_text = ""
+        self.is_processing_pdf = False
+        self.pdf_page_count = 0
+        self.sentences = []
+        self.sentence_to_page = {}
+
     @rx.event
     async def handle_upload(self, files: list[rx.UploadFile]):
         if not files:
@@ -77,11 +89,8 @@ class State(rx.State):
         yield
         file = files[0]
         upload_data = await file.read()
-        for i in range(101):
-            self.upload_progress = i
-            if i % 10 == 0:
-                yield
-            time.sleep(0.01)
+        self.upload_progress = 30
+        yield
         upload_dir = rx.get_upload_dir()
         upload_dir.mkdir(parents=True, exist_ok=True)
         unique_name = (
@@ -92,39 +101,61 @@ class State(rx.State):
         file_path = upload_dir / unique_name
         with file_path.open("wb") as f:
             f.write(upload_data)
+        self.upload_progress = 60
+        yield
         self.uploaded_file = unique_name
         self.original_filename = file.name
-        self.document_text = self._extract_text_from_pdf(file_path)
-        self._prepare_sentences()
         self._reset_audio_state()
+        self._reset_pdf_state()
+        self.is_processing_pdf = True
         self.uploading = False
+        self.upload_progress = 100
+        yield
         ai_state = await self.get_state(AIState)
         ai_state.clear_ai_states()
-        yield rx.toast.success(f"Uploaded {file.name}")
+        yield rx.toast.success(f"Uploaded {file.name}. Processing...")
+        yield State.process_pdf
 
-    def _extract_text_from_pdf(self, file_path: str) -> str:
+    @rx.event(background=True)
+    async def process_pdf(self):
+        """Extracts text and renders PDF using PDF.js."""
+        async with self:
+            if not self.uploaded_file:
+                return
+            file_path = rx.get_upload_dir() / self.uploaded_file
         try:
             with open(file_path, "rb") as f:
                 reader = PyPDF2.PdfReader(f)
-                text = ""
-                for page in reader.pages:
-                    extracted = page.extract_text()
-                    if extracted:
-                        text += extracted
-                return " ".join(text.split())
+                num_pages = len(reader.pages)
+            async with self:
+                self.pdf_page_count = num_pages
+            yield
+            yield self._render_pdf_script()
         except Exception as e:
-            logging.exception(f"Error extracting text from PDF: {e}")
-            return "Error extracting text from the document."
+            logging.exception(f"Error processing PDF: {e}")
+            async with self:
+                self.is_processing_pdf = False
+            yield rx.toast.error("Failed to process PDF.")
 
-    def _prepare_sentences(self):
-        """Splits the document text into sentences for highlighting."""
-        sentence_ends = re.compile("(?<!\\w\\.\\w.)(?<![A-Z][a-z]\\.)(?<=\\.|\\?|!)\\s")
-        raw_sentences = sentence_ends.split(self.document_text)
-        self.sentences = [
-            (sentence.strip(), i)
-            for i, sentence in enumerate(raw_sentences)
-            if sentence.strip()
-        ]
+    def _render_pdf_script(self) -> rx.event.EventSpec:
+        """Returns the script to render the PDF and extract text."""
+        return rx.call_script(
+            f"(async () => {{\n    try {{\n        const url = '/_upload/{self.uploaded_file}';\n        const pdfDoc = await pdfjsLib.getDocument(url).promise;\n        const allText = [];\n        const sentenceToPageMap = {{}};\n        const sentences = [];\n        const sentenceEnds = /(?<!\\w\\.\\w.)(?<![A-Z][a-z]\\.)(?<=\\.|\\?|!)\\s/g;\n\n        let currentSentence = '';\n        let sentenceIndex = 0;\n\n        for (let i = 1; i <= {self.pdf_page_count}; i++) {{\n            const page = await pdfDoc.getPage(i);\n            const scale = {self.zoom_level} / 100;\n            const viewport = page.getViewport({{ scale }});\n            const canvas = document.getElementById(`pdf-canvas-${{i-1}}`);\n            const context = canvas.getContext('2d');\n            canvas.height = viewport.height;\n            canvas.width = viewport.width;\n\n            const renderContext = {{ canvasContext: context, viewport: viewport }};\n            await page.render(renderContext).promise;\n\n            const textContent = await page.getTextContent();\n            const pageText = textContent.items.map(item => item.str).join(' ');\n\n            let textRuns = [];\n            let lastY = -1;\n            textContent.items.forEach(item => {{\n                if(Math.abs(item.transform[5] - lastY) > 2) {{\n                   if(textRuns.length > 0) textRuns[textRuns.length-1].text += ' ';\n                   textRuns.push({{text: '', items: []}});\n                }}\n                textRuns[textRuns.length-1].text += item.str;\n                textRuns[textRuns.length-1].items.push(item);\n                lastY = item.transform[5];\n            }});\n\n            textRuns.forEach(run => {{\n                let parts = run.text.split(sentenceEnds);\n                let currentItemIndex = 0;\n                parts.forEach((part, index) => {{\n                    if (!part.trim()) return;\n\n                    currentSentence += part.trim() + (index < parts.length - 1 ? ' ' : '');\n                    \n                    if (sentenceEnds.test(run.text.substring(currentSentence.length-2, currentSentence.length+2)) || index === parts.length-1) {{\n                        if (currentSentence.trim()) {{\n                            sentences.push([currentSentence.trim(), sentenceIndex]);\n                            sentenceToPageMap[sentenceIndex] = i - 1;\n                            sentenceIndex++;\n                        }}\n                        currentSentence = '';\n                    }}\n                }});\n            }});\n            allText.push(pageText);\n        }}\n        const fullText = allText.join(' ').replace(/\\s+/g, ' ');\n        return [fullText, sentences, sentenceToPageMap];\n    }} catch (error) {{\n        console.error('Error processing PDF:', error);\n        return [null, [], {{}}]; // Return empty data on error to unblock the UI\n    }}\n}})()",
+            callback=State.on_pdf_processed,
+        )
+
+    @rx.event
+    def on_pdf_processed(self, result: list):
+        """Callback after PDF.js has processed the document."""
+        if not result or len(result) < 3:
+            self.is_processing_pdf = False
+            yield rx.toast.error("Failed to extract text from PDF.")
+            return
+        self.document_text = result[0]
+        self.sentences = [tuple(s) for s in result[1]]
+        self.sentence_to_page = {int(k): v for k, v in result[2].items()}
+        self.is_processing_pdf = False
+        yield rx.toast.success("Document is ready!")
 
     def _prepare_ssml(self) -> str:
         """Wraps sentences in SSML <mark> tags."""
@@ -288,9 +319,13 @@ class State(rx.State):
         if current_index != self.current_sentence_index:
             self.current_sentence_index = current_index
             if current_index != -1:
-                return rx.scroll_to(
-                    f"sentence-{current_index}", block="center", behavior="smooth"
-                )
+                return self._update_highlight_script(current_index)
+
+    def _update_highlight_script(self, sentence_index: int) -> rx.event.EventSpec:
+        """Returns script to highlight sentence and scroll it into view."""
+        return rx.call_script(
+            f"\n            (async () => {{\n                const sentenceIndex = {sentence_index};\n                const sentenceToPageMap = {json.dumps(self.sentence_to_page)};\n                const pageNum = sentenceToPageMap[sentenceIndex];\n                if (pageNum === undefined) return;\n\n                const sentences = {json.dumps(self.sentences)};\n                const sentenceText = sentences.find(s => s[1] === sentenceIndex)[0];\n\n                const url = '/_upload/{self.uploaded_file}';\n                const pdfDoc = await pdfjsLib.getDocument(url).promise;\n                const page = await pdfDoc.getPage(pageNum + 1);\n                const scale = {self.zoom_level} / 100;\n                const viewport = page.getViewport({{ scale }});\n                const textContent = await page.getTextContent();\n\n                const bidiTexts = textContent.items.map(item => item.str);\n                const sentenceStartIndex = bidiTexts.join('').indexOf(sentenceText.substring(0, 15));\n                const sentenceEndIndex = sentenceStartIndex + sentenceText.length;\n\n                let charCount = 0;\n                let highlightRects = [];\n                let firstRect = null;\n\n                for (const item of textContent.items) {{\n                    const itemStart = charCount;\n                    const itemEnd = charCount + item.str.length;\n\n                    if (itemEnd > sentenceStartIndex && itemStart < sentenceEndIndex) {{\n                        const [x, y, width, height] = [\n                            item.transform[4],\n                            viewport.height - item.transform[5] - item.height,\n                            item.width,\n                            item.height,\n                        ];\n                        const rect = {{ x, y, width, height }};\n                        highlightRects.push(rect);\n                        if (!firstRect) firstRect = rect;\n                    }}\n                    charCount = itemEnd;\n                }}\n                \n                const highlightLayer = document.getElementById('highlight-layer');\n                const pdfContainer = document.getElementById('pdf-container');\n                const pageCanvas = document.getElementById(`pdf-canvas-${{pageNum}}`);\n                highlightLayer.innerHTML = ''; // Clear previous highlights\n\n                if (highlightRects.length > 0) {{\n                    highlightLayer.style.left = `${{pageCanvas.offsetLeft}}px`;\n                    highlightLayer.style.top = `${{pageCanvas.offsetTop}}px`;\n                    highlightLayer.style.width = `${{pageCanvas.width}}px`;\n                    highlightLayer.style.height = `${{pageCanvas.height}}px`;\n\n                    highlightRects.forEach(rect => {{\n                        const div = document.createElement('div');\n                        div.style.position = 'absolute';\n                        div.style.backgroundColor = 'rgba(252, 211, 77, 0.4)';\n                        div.style.left = `${{rect.x}}px`;\n                        div.style.top = `${{rect.y}}px`;\n                        div.style.width = `${{rect.width}}px`;\n                        div.style.height = `${{rect.height}}px`;\n                        highlightLayer.appendChild(div);\n                    }});\n                    \n                    if (firstRect) {{\n                         pdfContainer.scrollTo({{\n                             top: pageCanvas.offsetTop + firstRect.y - pdfContainer.clientHeight / 4,\n                             behavior: 'smooth'\n                         }});\n                    }}\n                }}\n            }})();\n            "
+        )
 
     @rx.event
     def on_time_update(self) -> rx.event.EventSpec:
@@ -301,6 +336,8 @@ class State(rx.State):
 
     @rx.event
     def on_duration_change_callback(self, duration: float):
+        if not isinstance(duration, (int, float)):
+            duration = 0
         self.duration = duration
         self.duration_str = self._format_time(duration)
 
@@ -316,6 +353,10 @@ class State(rx.State):
         self.is_playing = False
         self.audio_progress = 100
         self.current_sentence_index = -1
+        yield
+        yield rx.call_script(
+            "var hl = document.getElementById('highlight-layer'); if(hl) hl.innerHTML = '';"
+        )
 
     @rx.event
     def on_slider_change(self, value: int):

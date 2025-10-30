@@ -7,3 +7,5 @@ PyMuPDF
 google-generativeai
 google-cloud-aiplatform
 httpx
+supabase
+resend
