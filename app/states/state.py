@@ -47,6 +47,7 @@ class State(rx.State):
     show_glossary: bool = False
     show_quiz: bool = False
     show_chat: bool = False
+    minimized_chat: bool = False
 
     @rx.event
     def zoom_in(self):

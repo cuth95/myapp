@@ -25,12 +25,14 @@ def summarizer_modal() -> rx.Component:
                     rx.cond(
                         AIState.is_summarizing,
                         loading_view("Generating summary..."),
-                        rx.el.div(
+                        rx.scroll_area(
                             rx.markdown(
                                 AIState.summary,
-                                class_name="prose prose-violet max-w-none text-gray-700",
+                                class_name="prose prose-violet max-w-none text-gray-700 p-1",
                             ),
-                            class_name="mt-4 max-h-96 overflow-y-auto",
+                            class_name="mt-4 max-h-[60vh]",
+                            type="always",
+                            scrollbars="vertical",
                         ),
                     )
                 ),
@@ -43,7 +45,7 @@ def summarizer_modal() -> rx.Component:
                     ),
                     class_name="flex justify-end mt-4",
                 ),
-                class_name="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-xl shadow-2xl p-6 w-full max-w-lg z-50",
+                class_name="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-xl shadow-2xl p-6 w-[90vw] max-w-lg z-50",
             ),
         ),
         open=State.show_summarizer,
@@ -72,12 +74,14 @@ def glossary_modal() -> rx.Component:
                     rx.cond(
                         AIState.is_generating_glossary,
                         loading_view("Generating glossary..."),
-                        rx.el.div(
+                        rx.scroll_area(
                             rx.el.dl(
                                 rx.foreach(AIState.glossary, glossary_term_item),
-                                class_name="divide-y divide-gray-200",
+                                class_name="divide-y divide-gray-200 p-1",
                             ),
-                            class_name="mt-4 max-h-96 overflow-y-auto",
+                            class_name="mt-4 max-h-[60vh]",
+                            type="always",
+                            scrollbars="vertical",
                         ),
                     )
                 ),
@@ -90,7 +94,7 @@ def glossary_modal() -> rx.Component:
                     ),
                     class_name="flex justify-end mt-4",
                 ),
-                class_name="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-xl shadow-2xl p-6 w-full max-w-lg z-50",
+                class_name="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-xl shadow-2xl p-6 w-[90vw] max-w-lg z-50",
             ),
         ),
         open=State.show_glossary,
@@ -178,9 +182,11 @@ def quiz_modal() -> rx.Component:
                     rx.cond(
                         AIState.is_generating_quiz,
                         loading_view("Generating quiz..."),
-                        rx.el.div(
+                        rx.scroll_area(
                             rx.foreach(AIState.quiz, quiz_question_component),
-                            class_name="mt-4 max-h-[60vh] overflow-y-auto",
+                            class_name="mt-4 max-h-[60vh] p-1",
+                            type="always",
+                            scrollbars="vertical",
                         ),
                     )
                 ),
@@ -208,7 +214,7 @@ def quiz_modal() -> rx.Component:
                     ),
                     class_name="flex justify-end mt-4",
                 ),
-                class_name="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-xl shadow-2xl p-6 w-full max-w-3xl z-50",
+                class_name="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-xl shadow-2xl p-6 w-[90vw] max-w-3xl z-50",
             ),
         ),
         open=State.show_quiz,
@@ -245,54 +251,80 @@ def chat_message_component(message: ChatMessage) -> rx.Component:
 
 def chat_modal() -> rx.Component:
     """Modal for the interactive chat."""
-    return rx.radix.primitives.dialog.root(
-        rx.radix.primitives.dialog.portal(
-            rx.radix.primitives.dialog.overlay(
-                class_name="fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
-            ),
-            rx.radix.primitives.dialog.content(
-                rx.radix.primitives.dialog.title("Chat with Document"),
-                rx.el.div(
-                    rx.scroll_area(
-                        rx.el.div(
-                            rx.foreach(AIState.chat_history, chat_message_component),
-                            class_name="space-y-4 p-4",
-                        ),
-                        type="always",
-                        scrollbars="vertical",
-                        class_name="h-96 border rounded-md bg-white",
-                    ),
-                    rx.el.form(
-                        rx.el.input(
-                            id="chat-input",
-                            name="message",
-                            placeholder="Ask a question...",
-                            class_name="flex-grow p-2 border rounded-l-md",
-                            disabled=AIState.is_chatting,
-                        ),
-                        rx.el.button(
-                            rx.icon("send", class_name="h-5 w-5"),
-                            type="submit",
-                            class_name="p-2 bg-violet-500 text-white rounded-r-md disabled:bg-violet-300",
-                            disabled=AIState.is_chatting,
-                        ),
-                        on_submit=AIState.send_chat_message,
-                        class_name="flex mt-4",
-                    ),
-                    class_name="mt-4",
+    return rx.el.div(
+        rx.radix.primitives.dialog.root(
+            rx.radix.primitives.dialog.portal(
+                rx.radix.primitives.dialog.overlay(
+                    class_name="fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
                 ),
-                rx.el.div(
-                    rx.radix.primitives.dialog.close(
+                rx.radix.primitives.dialog.content(
+                    rx.el.div(
+                        rx.radix.primitives.dialog.title("Chat with Document"),
                         rx.el.button(
-                            "Close",
-                            class_name="mt-4 px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300",
-                        )
+                            rx.icon("minus", class_name="h-4 w-4"),
+                            on_click=[
+                                lambda: State.set_show_chat(False),
+                                lambda: State.set_minimized_chat(True),
+                            ],
+                            class_name="absolute top-3 right-16 p-2 text-gray-500 hover:bg-gray-100 rounded-md",
+                        ),
+                        class_name="flex items-center justify-between",
                     ),
-                    class_name="flex justify-end mt-4",
+                    rx.el.div(
+                        rx.scroll_area(
+                            rx.el.div(
+                                rx.foreach(
+                                    AIState.chat_history, chat_message_component
+                                ),
+                                class_name="space-y-4 p-4",
+                            ),
+                            type="always",
+                            scrollbars="vertical",
+                            class_name="h-[60vh] border rounded-md bg-white",
+                        ),
+                        rx.el.form(
+                            rx.el.input(
+                                id="chat-input",
+                                name="message",
+                                placeholder="Ask a question...",
+                                class_name="flex-grow p-2 border rounded-l-md",
+                                disabled=AIState.is_chatting,
+                            ),
+                            rx.el.button(
+                                rx.icon("send", class_name="h-5 w-5"),
+                                type="submit",
+                                class_name="p-2 bg-violet-500 text-white rounded-r-md disabled:bg-violet-300",
+                                disabled=AIState.is_chatting,
+                            ),
+                            on_submit=AIState.send_chat_message,
+                            class_name="flex mt-4",
+                        ),
+                        class_name="mt-4",
+                    ),
+                    rx.el.div(
+                        rx.radix.primitives.dialog.close(
+                            rx.el.button(
+                                "Close",
+                                on_click=lambda: State.set_minimized_chat(False),
+                                class_name="mt-4 px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300",
+                            )
+                        ),
+                        class_name="flex justify-end mt-4",
+                    ),
+                    class_name="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-xl shadow-2xl p-6 w-[90vw] max-w-3xl z-50",
                 ),
-                class_name="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-xl shadow-2xl p-6 w-full max-w-3xl z-50",
             ),
+            open=State.show_chat,
+            on_open_change=State.set_show_chat,
         ),
-        open=State.show_chat,
-        on_open_change=State.set_show_chat,
+        rx.cond(
+            State.minimized_chat,
+            rx.el.button(
+                rx.icon("message-square-text", class_name="h-6 w-6 mr-2"),
+                "Open Chat",
+                on_click=lambda: State.set_show_chat(True),
+                class_name="fixed bottom-20 right-6 bg-violet-500 text-white rounded-full shadow-lg p-4 flex items-center hover:bg-violet-600 z-30",
+            ),
+            None,
+        ),
     )
