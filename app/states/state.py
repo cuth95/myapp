@@ -147,15 +147,16 @@ class State(rx.State):
     @rx.event
     def on_pdf_processed(self, result: list):
         """Callback after PDF.js has processed the document."""
-        if not result or len(result) < 3:
+        if not result or len(result) < 3 or (not result[0]):
             self.is_processing_pdf = False
-            yield rx.toast.error("Failed to extract text from PDF.")
-            return
-        self.document_text = result[0]
-        self.sentences = [tuple(s) for s in result[1]]
-        self.sentence_to_page = {int(k): v for k, v in result[2].items()}
+            return rx.toast.error("Failed to extract text from PDF.")
+        self.document_text, self.sentences, self.sentence_to_page = (
+            result[0],
+            [tuple(s) for s in result[1]],
+            {int(k): v for k, v in result[2].items()},
+        )
         self.is_processing_pdf = False
-        yield rx.toast.success("Document is ready!")
+        return rx.toast.success("Document is ready!")
 
     def _prepare_ssml(self) -> str:
         """Wraps sentences in SSML <mark> tags."""
@@ -353,8 +354,7 @@ class State(rx.State):
         self.is_playing = False
         self.audio_progress = 100
         self.current_sentence_index = -1
-        yield
-        yield rx.call_script(
+        return rx.call_script(
             "var hl = document.getElementById('highlight-layer'); if(hl) hl.innerHTML = '';"
         )
 
