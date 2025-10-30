@@ -317,13 +317,14 @@ class State(rx.State):
         self.current_sentence_index = -1
 
     @rx.event
-    def on_slider_change(self, value):
+    def on_slider_change(self, value: int):
         return rx.call_script(
-            f"\n            var audio = document.getElementById('audio-player');\n            if (audio.duration) {{\n                var newTime = audio.duration * ({value[0]} / 100);\n                audio.currentTime = newTime;\n            }}\n            "
+            f"\n            var audio = document.getElementById('audio-player');\n            if (audio.duration) {{\n                var newTime = audio.duration * ({value} / 100);\n                audio.currentTime = newTime;\n            }}\n            "
         )
 
     @rx.event
     def seek_audio(self, seconds: int):
+        """Seeks the audio forward or backward by a number of seconds."""
         return rx.call_script(
             f"\n            var audio = document.getElementById('audio-player');\n            audio.currentTime += {seconds};\n            "
         )

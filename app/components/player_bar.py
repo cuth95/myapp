@@ -32,12 +32,14 @@ def player_bar() -> rx.Component:
         ),
         rx.el.div(
             rx.el.span(State.current_time_str, class_name="text-xs w-12 text-center"),
-            rx.slider(
-                on_change=State.on_slider_change,
-                class_name="w-full mx-4",
+            rx.el.input(
+                type="range",
+                on_change=State.on_slider_change.throttle(100),
+                class_name="w-full mx-4 accent-violet-500",
                 min=0,
                 max=100,
-                default_value=[State.audio_progress],
+                default_value=State.audio_progress,
+                key=State.audio_url,
                 disabled=State.is_generating_audio,
             ),
             rx.el.span(State.duration_str, class_name="text-xs w-12 text-center"),
